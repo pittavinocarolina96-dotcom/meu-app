@@ -3,19 +3,29 @@ import { Chips, Empty, ItemThumb, Sheet } from "../components.tsx";
 import { CATEGORIES } from "../options.ts";
 import { useStore } from "../store.tsx";
 import type { Item } from "../types.ts";
+import { Cutout } from "./Cutout.tsx";
 import { ItemForm, type Draft } from "./ItemForm.tsx";
 
 export function ItemEditor({ item, onClose }: { item: Item; onClose: () => void }) {
   const { saveItem, removeItem, toast } = useStore();
   const [draft, setDraft] = useState<Draft>(item);
+  const [image, setImage] = useState(item.image);
+  const [cutting, setCutting] = useState(false);
+  if (cutting)
+    return (
+      <Sheet title="Recortar só a roupa" onClose={() => setCutting(false)}>
+        <Cutout src={image} onDone={(d) => { setImage(d); setCutting(false); }} onSkip={() => setCutting(false)} />
+      </Sheet>
+    );
   return (
     <Sheet title="Editar peça" onClose={onClose}>
-      <div className="preview"><img src={item.image} alt="" /></div>
+      <div className="preview"><img src={image} alt="" /></div>
+      <button className="btn ghost block" onClick={() => setCutting(true)}>✂️ Recortar só a roupa</button>
       {item.link && (
         <a className="btn ghost block" href={item.link} target="_blank" rel="noreferrer">Abrir na loja ↗</a>
       )}
       <ItemForm value={draft} onChange={setDraft} />
-      <button className="btn primary block" onClick={() => { saveItem({ ...item, ...draft }); toast("Peça atualizada"); onClose(); }}>
+      <button className="btn primary block" onClick={() => { saveItem({ ...item, ...draft, image }); toast("Peça atualizada"); onClose(); }}>
         Salvar
       </button>
       <button

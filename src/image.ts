@@ -36,62 +36,6 @@ export function cropResize(img: HTMLImageElement, rect: Rect, max = 720): HTMLCa
   return c;
 }
 
-/**
- * Remove o fundo por "inundação" a partir das bordas: pixels parecidos com a cor da
- * borda e conectados a ela viram transparentes. Funciona bem com fotos de produto
- * (fundo liso claro/cinza), que é o caso da maioria das lojas online.
- */
-export function removeBackground(src: HTMLCanvasElement, tolerance = 34): { canvas: HTMLCanvasElement; removed: number } {
-  const { width: w, height: h } = src;
-  const c = canvas(w, h);
-  const ctx = c.getContext("2d", { willReadFrequently: true })!;
-  ctx.drawImage(src, 0, 0);
-  const data = ctx.getImageData(0, 0, w, h);
-  const px = data.data;
-  const seen = new Uint8Array(w * h);
-  const stack: number[] = [];
-  const tol2 = tolerance * tolerance * 3;
-
-  // semente em cada pixel da borda; compara com a cor da própria semente (aceita fundos em degradê)
-  const seeds: number[] = [];
-  for (let x = 0; x < w; x++) seeds.push(x, (h - 1) * w + x);
-  for (let y = 0; y < h; y++) seeds.push(y * w, y * w + w - 1);
-
-  for (const s of seeds) {
-    if (seen[s]) continue;
-    const r0 = px[s * 4], g0 = px[s * 4 + 1], b0 = px[s * 4 + 2];
-    stack.push(s);
-    seen[s] = 1;
-    while (stack.length) {
-      const p = stack.pop()!;
-      const i = p * 4;
-      px[i + 3] = 0;
-      const x = p % w, y = (p / w) | 0;
-      const nb = [x > 0 ? p - 1 : -1, x < w - 1 ? p + 1 : -1, y > 0 ? p - w : -1, y < h - 1 ? p + w : -1];
-      for (const q of nb) {
-        if (q < 0 || seen[q]) continue;
-        const j = q * 4;
-        const d = (px[j] - r0) ** 2 + (px[j + 1] - g0) ** 2 + (px[j + 2] - b0) ** 2;
-        if (d <= tol2) { seen[q] = 1; stack.push(q); }
-      }
-    }
-  }
-
-  // suaviza a borda: pixel opaco vizinho de transparente fica semitransparente
-  const alpha = new Uint8ClampedArray(w * h);
-  for (let p = 0; p < w * h; p++) alpha[p] = px[p * 4 + 3];
-  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
-    const p = y * w + x;
-    if (!alpha[p]) continue;
-    const t = (alpha[p - 1] === 0 ? 1 : 0) + (alpha[p + 1] === 0 ? 1 : 0) + (alpha[p - w] === 0 ? 1 : 0) + (alpha[p + w] === 0 ? 1 : 0);
-    if (t) px[p * 4 + 3] = 255 - t * 50;
-  }
-  ctx.putImageData(data, 0, 0);
-  let removed = 0;
-  for (let p = 0; p < w * h; p++) if (seen[p]) removed++;
-  return { canvas: trim(c), removed: removed / (w * h) };
-}
-
 /** Corta as bordas transparentes. */
 export function trim(src: HTMLCanvasElement): HTMLCanvasElement {
   const { width: w, height: h } = src;
