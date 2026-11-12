@@ -1,0 +1,16 @@
+name: Teste segmentação (temporário)
+on:
+  push:
+    branches: [claude/outfit-builder-app-uehax1]
+    paths: [tests/seg/**, .github/workflows/seg-test.yml]
+jobs:
+  seg:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm install --no-save @huggingface/transformers@4.3.2
+      - run: node tests/seg/run.mjs
+      - run: DTYPE=fp32 node tests/seg/run.mjs
+        continue-on-error: true
