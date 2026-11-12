@@ -166,7 +166,7 @@ export function AddPage({ onDone }: { onDone: () => void }) {
 
       {step === "cut" && cur.cropped && (
         <>
-          <h2 className="step-title">2. Toque na roupa</h2>
+          <h2 className="step-title">2. Recorte a roupa</h2>
           <Cutout src={cur.cropped} onDone={finishCut} onSkip={() => finishCut(cur.cropped!)} />
         </>
       )}
