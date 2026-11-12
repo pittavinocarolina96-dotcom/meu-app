@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { loadImage, toDataURL, trim } from "../image.ts";
+import { clearCrash, clearStage, lastCrash } from "../diag.ts";
 import { applyMask, Cutter, type Point } from "../segment.ts";
 
 /**
@@ -15,9 +16,12 @@ export function Cutout({ src, onDone, onSkip }: { src: string; onDone: (dataURL:
   const [mask, setMask] = useState<Uint8ClampedArray | null>(null);
   const [mode, setMode] = useState<"on" | "off">("on");
   const [busy, setBusy] = useState(true);
+  const [crashed] = useState(lastCrash);
+  const [started, setStarted] = useState(!crashed);
 
   // prepara a imagem e o modelo
   useEffect(() => {
+    if (!started) return;
     let alive = true;
     (async () => {
       try {
@@ -34,11 +38,12 @@ export function Cutout({ src, onDone, onSkip }: { src: string; onDone: (dataURL:
         setPoints([{ x: c.width / 2, y: c.height / 2, on: true }]);
       } catch (e) {
         console.error(e);
-        if (alive) { setError("Não consegui carregar o recorte inteligente. Verifique a internet e tente de novo."); setBusy(false); }
+        clearStage();
+        if (alive) { setError(`Não consegui carregar o recorte inteligente (${(e as Error)?.message || e}).`); setBusy(false); }
       }
     })();
     return () => { alive = false; };
-  }, [src]);
+  }, [src, started]);
 
   // recalcula a máscara a cada toque
   useEffect(() => {
@@ -47,7 +52,7 @@ export function Cutout({ src, onDone, onSkip }: { src: string; onDone: (dataURL:
     setBusy(true);
     cutter.mask(points).then(
       (m) => { if (alive) { setMask(m); setBusy(false); } },
-      (e) => { console.error(e); if (alive) { setError("O recorte falhou nesta foto."); setBusy(false); } }
+      (e) => { console.error(e); clearStage(); if (alive) { setError(`O recorte falhou nesta foto (${(e as Error)?.message || e}).`); setBusy(false); } }
     );
     return () => { alive = false; };
   }, [cutter, points]);
@@ -96,10 +101,23 @@ export function Cutout({ src, onDone, onSkip }: { src: string; onDone: (dataURL:
 
   const done = () => {
     if (!cutter || !mask) return;
+    clearCrash();
     const { canvas, coverage } = applyMask(cutter.src, mask);
     if (coverage < 0.01) { setError("Quase nada ficou selecionado. Toque em cima da roupa."); return; }
     onDone(toDataURL(trim(canvas), true));
   };
+
+  if (!started)
+    return (
+      <div className="cutout">
+        <div className="banner warn">
+          Da última vez o recorte fechou o app na etapa “{crashed}”. Isso costuma ser falta de memória no celular.
+          Abrir o LookLab direto no Safari (ou pelo ícone na tela de início) ajuda.
+        </div>
+        <button className="btn primary block" onClick={onSkip}>Continuar sem recortar</button>
+        <button className="btn ghost block" onClick={() => { clearCrash(); setStarted(true); }}>Tentar o recorte mesmo assim</button>
+      </div>
+    );
 
   if (error && !cutter)
     return (

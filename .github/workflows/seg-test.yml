@@ -2,7 +2,7 @@ name: Teste recorte (temporário)
 on:
   push:
     branches: [claude/outfit-builder-app-uehax1]
-    paths: [tests/seg/**, .github/workflows/seg-test.yml]
+    paths: [tests/seg/**, .github/workflows/seg-test.yml, src/**]
 permissions:
   contents: write
 jobs:
@@ -11,18 +11,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22 }
-      - run: npm install --no-save @huggingface/transformers@4.3.2
-      - name: Modelos
-        run: |
-          run() { /usr/bin/time -v node tests/seg/bench.mjs "$@" 2> /tmp/t.txt | tee -a seg-out-log.txt || true; grep -E "Maximum resident|Error|error" /tmp/t.txt | head -5 | sed "s|^|MEM $2 |" | tee -a seg-out-log.txt; }
-          mkdir -p seg-out
-          run SamModel Xenova/slimsam-77-uniform q8
-          run Sam2Model onnx-community/sam2.1-hiera-tiny-ONNX q8
-          run Sam2Model onnx-community/sam2.1-hiera-tiny-ONNX fp32
-          run EdgeTamModel onnx-community/EdgeTAM-ONNX q8
-          run EdgeTamModel onnx-community/EdgeTAM-ONNX fp32
-          mv seg-out-log.txt seg-out/log.txt
+        with: { node-version: 22, cache: npm }
+      - run: npm ci && npm run build
+      - run: npm install --no-save playwright && npx playwright install --with-deps chromium
+      - run: |
+          (npx vite preview --port 4173 &) ; sleep 3
+          node tests/seg/browser.cjs 2>&1 | tee log.txt || true
+          mkdir -p seg-out && mv log.txt seg-out/
       - run: |
           git config user.name "github-actions"
           git config user.email "github-actions@users.noreply.github.com"
