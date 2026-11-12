@@ -1,10 +1,14 @@
 // Substituto do Transformers.js só para testar a interface: "recorta" um círculo em volta de cada toque.
-export const env = { allowLocalModels: true };
+export const env = { allowLocalModels: true, backends: { onnx: { wasm: {} } } };
 export class RawImage { constructor(public width: number, public height: number) {} static fromCanvas(c: HTMLCanvasElement) { return new RawImage(c.width, c.height); } }
 const tensor = (data: any, dims: number[]) => ({ data, dims });
 export const AutoProcessor = {
   async from_pretrained() {
-    const proc: any = async (img: RawImage) => ({ pixel_values: null, original_sizes: [[img.height, img.width]], reshaped_input_sizes: [[img.height, img.width]] });
+    const proc: any = async (img: RawImage, opts?: any) => ({
+      pixel_values: null, original_sizes: [[img.height, img.width]], reshaped_input_sizes: [[img.height, img.width]],
+      input_points: opts && tensor(opts.input_points[0][0], [1, 1, opts.input_points[0][0].length, 2]),
+      input_labels: opts && tensor(opts.input_labels[0][0], [1, 1, opts.input_labels[0][0].length]),
+    });
     proc.reshape_input_points = (pts: number[][][][]) => tensor(pts[0][0], [1, 1, pts[0][0].length, 2]);
     proc.add_input_labels = (labels: number[][][]) => tensor(labels[0][0], [1, 1, labels[0][0].length]);
     proc.post_process_masks = async (m: any, sizes: number[][]) => {
@@ -23,7 +27,7 @@ export const AutoProcessor = {
     return proc;
   },
 };
-export const SamModel = {
+const fakeModel = {
   async from_pretrained(_id: string, opts: any) {
     for (const p of [10, 60, 100]) opts.progress_callback?.({ status: "progress", file: "onnx/model.onnx", progress: p });
     const model: any = async (inp: any) => ({ pred_masks: { pts: inp.input_points.data, labels: inp.input_labels.data }, iou_scores: tensor(new Float32Array([0.5, 0.9, 0.7]), [1, 1, 3]) });
@@ -31,3 +35,6 @@ export const SamModel = {
     return model;
   },
 };
+
+export const SamModel = fakeModel;
+export const EdgeTamModel = fakeModel;

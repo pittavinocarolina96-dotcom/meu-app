@@ -17,7 +17,7 @@ export function loadSam(onProgress?: (pct: number) => void) {
     const t = await import("@huggingface/transformers");
     t.env.allowLocalModels = false;
     // modo leve: 1 thread, sem worker extra (menos memória no iPhone)
-    const wasm = (t.env.backends.onnx as any)?.wasm;
+    const wasm = (t.env.backends as any)?.onnx?.wasm;
     if (wasm) { wasm.numThreads = 1; wasm.proxy = false; }
     stage("baixar a IA de recorte");
     const progress_callback = (p: any) => {
@@ -86,12 +86,10 @@ export class Cutter {
   }
 }
 
-/** Aplica a máscara: limpa pedacinhos soltos, suaviza a borda e devolve só a peça. */
+/** Aplica a máscara (como está na tela), suaviza a borda e devolve só a peça. */
 export function applyMask(src: HTMLCanvasElement, mask: Uint8ClampedArray): { canvas: HTMLCanvasElement; coverage: number } {
   const w = src.width, h = src.height;
-  const a = mask.slice();
-  keepLargestParts(a, w, h);
-  const soft = blurAlpha(a, w, h);
+  const soft = blurAlpha(mask, w, h);
   const c = document.createElement("canvas");
   c.width = w; c.height = h;
   const ctx = c.getContext("2d")!;
@@ -106,8 +104,8 @@ export function applyMask(src: HTMLCanvasElement, mask: Uint8ClampedArray): { ca
   return { canvas: c, coverage: n / (w * h) };
 }
 
-/** Mantém as regiões grandes (tira pontinhos soltos, como textos do print). */
-function keepLargestParts(a: Uint8ClampedArray, w: number, h: number) {
+/** Mantém as regiões grandes (tira pontinhos soltos, como textos do print). Usado no recorte da IA. */
+export function keepLargestParts(a: Uint8ClampedArray, w: number, h: number) {
   const label = new Int32Array(w * h);
   const sizes: number[] = [0];
   const stack: number[] = [];
