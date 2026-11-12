@@ -1,9 +1,8 @@
 import { useRef, useState } from "react";
 import { nearestColor } from "../colors.ts";
 import { CropEditor } from "../components.tsx";
-import {
-  cropResize, dominantColor, fileToDataURL, forAI, loadImage, removeBackground, toDataURL, type Rect,
-} from "../image.ts";
+import { cropResize, dominantColor, fileToDataURL, forAI, loadImage, toDataURL, type Rect } from "../image.ts";
+import { Cutout } from "./Cutout.tsx";
 import { uid, useStore } from "../store.tsx";
 import { emptyDraft, ItemForm, type Draft } from "./ItemForm.tsx";
 
@@ -11,8 +10,8 @@ interface Current {
   src: string;
   img: HTMLImageElement;
   rect: Rect;
-  removeBg: boolean;
-  preview?: string;
+  cropped?: string; // foto recortada no retângulo
+  preview?: string; // imagem final (só a peça)
   draft: Draft;
 }
 
@@ -22,10 +21,9 @@ export function AddPage({ onDone }: { onDone: () => void }) {
   const { settings, saveItem, toast } = useStore();
   const [queue, setQueue] = useState<File[]>([]);
   const [cur, setCur] = useState<Current | null>(null);
-  const [step, setStep] = useState<"pick" | "crop" | "details">("pick");
+  const [step, setStep] = useState<"pick" | "crop" | "cut" | "details">("pick");
   const [aiState, setAiState] = useState<"idle" | "busy" | "done" | "error">("idle");
   const [aiMsg, setAiMsg] = useState("");
-  const [busy, setBusy] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const token = useRef(0);
   const hasAI = !!settings.apiKey;
@@ -34,7 +32,7 @@ export function AddPage({ onDone }: { onDone: () => void }) {
     const t = ++token.current;
     const src = await fileToDataURL(file);
     const img = await loadImage(src);
-    setCur({ src, img, rect: FULL, removeBg: true, draft: emptyDraft() });
+    setCur({ src, img, rect: FULL, draft: emptyDraft() });
     setStep("crop");
     setAiMsg("");
     if (!hasAI) { setAiState("idle"); return; }
@@ -83,29 +81,20 @@ export function AddPage({ onDone }: { onDone: () => void }) {
 
   function processCrop() {
     if (!cur) return;
-    setBusy(true);
-    // deixa a tela atualizar antes do processamento pesado
-    setTimeout(() => {
-      try {
-        let c = cropResize(cur.img, cur.rect);
-        let transparent = false;
-        if (cur.removeBg) {
-          // tolerância menor quando a peça tem cor parecida com o fundo (ex.: blusa branca em fundo claro)
-          let done = false;
-          for (const tol of [34, 16, 7]) {
-            const cut = removeBackground(c, tol);
-            if (cut.removed > 0.03 && cut.removed < 0.9) { c = cut.canvas; transparent = true; done = true; break; }
-          }
-          if (!done) toast("O fundo não saiu bem, mantive a foto recortada.");
-        }
-        const draft = { ...cur.draft };
-        if (!draft.colors.length) draft.colors = [nearestColor(dominantColor(c))];
-        setCur({ ...cur, preview: toDataURL(c, transparent), draft });
-        setStep("details");
-      } finally {
-        setBusy(false);
-      }
-    }, 30);
+    const c = cropResize(cur.img, cur.rect);
+    setCur({ ...cur, cropped: toDataURL(c, false) });
+    setStep("cut");
+  }
+
+  async function finishCut(dataURL: string) {
+    if (!cur) return;
+    const draft = { ...cur.draft };
+    if (!draft.colors.length) {
+      const img = await loadImage(dataURL);
+      draft.colors = [nearestColor(dominantColor(cropResize(img, FULL, 200)))];
+    }
+    setCur((c) => (c ? { ...c, preview: dataURL, draft: c.draft.colors.length ? c.draft : draft } : c));
+    setStep("details");
   }
 
   function save() {
@@ -156,8 +145,8 @@ export function AddPage({ onDone }: { onDone: () => void }) {
   return (
     <div className="page">
       <header className="page-head row-between">
-        <button className="link-btn" onClick={() => (step === "details" ? setStep("crop") : next())}>
-          ← {step === "details" ? "Recorte" : queue.length ? "Pular" : "Cancelar"}
+        <button className="link-btn" onClick={() => (step === "details" ? setStep("cut") : step === "cut" ? setStep("crop") : next())}>
+          ← {step === "details" ? "Recorte" : step === "cut" ? "Enquadrar" : queue.length ? "Pular" : "Cancelar"}
         </button>
         {queue.length > 0 && <span className="muted">mais {queue.length} na fila</span>}
       </header>
@@ -168,21 +157,23 @@ export function AddPage({ onDone }: { onDone: () => void }) {
 
       {step === "crop" && (
         <>
-          <h2 className="step-title">1. Recorte só a peça</h2>
+          <h2 className="step-title">1. Enquadre a peça</h2>
+          <p className="muted small">Arraste o retângulo em volta da roupa (sem os textos da loja).</p>
           <CropEditor src={cur.src} rect={cur.rect} onChange={(rect) => setCur({ ...cur, rect })} />
-          <label className="toggle">
-            <input type="checkbox" checked={cur.removeBg} onChange={(e) => setCur({ ...cur, removeBg: e.target.checked })} />
-            <span>Remover o fundo (melhor para fotos de fundo liso)</span>
-          </label>
-          <button className="btn primary block" onClick={processCrop} disabled={busy}>
-            {busy ? "Processando…" : "Continuar"}
-          </button>
+          <button className="btn primary block" onClick={processCrop}>Continuar</button>
+        </>
+      )}
+
+      {step === "cut" && cur.cropped && (
+        <>
+          <h2 className="step-title">2. Toque na roupa</h2>
+          <Cutout src={cur.cropped} onDone={finishCut} onSkip={() => finishCut(cur.cropped!)} />
         </>
       )}
 
       {step === "details" && cur.preview && (
         <>
-          <h2 className="step-title">2. Confira os detalhes</h2>
+          <h2 className="step-title">3. Confira os detalhes</h2>
           <div className="preview"><img src={cur.preview} alt="" /></div>
           {aiState === "busy" && <p className="muted center">Os campos serão preenchidos assim que a IA terminar.</p>}
           <ItemForm value={cur.draft} onChange={(draft) => setCur({ ...cur, draft })} />
