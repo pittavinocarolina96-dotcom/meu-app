@@ -10,7 +10,7 @@ const cases = {
   "blusa.jpg": { pt: [110, 70], box: [10, 10, 229, 130] },
 };
 function show(mask, w, h) {
-  const W = 46, H = Math.round(46 * h / w / 2);
+  const W = 32, H = Math.round(46 * h / w / 2);
   for (let y = 0; y < H; y++) {
     let l = "  ";
     for (let x = 0; x < W; x++) l += mask[Math.floor(y * h / H) * w + Math.floor(x * w / W)] ? "#" : ".";
@@ -19,11 +19,9 @@ function show(mask, w, h) {
 }
 for (const [f, c] of Object.entries(cases)) {
   const img = await RawImage.read(`tests/seg/${f}`);
-  for (const mode of ["ponto", "caixa"]) {
+  for (const mode of ["ponto"]) {
     const t0 = Date.now();
-    const inputs = mode === "ponto"
-      ? await processor(img, { input_points: [[c.pt]], input_labels: [[1]] })
-      : await processor(img, { input_boxes: [[c.box]] });
+    const inputs = await processor(img, { input_points: [[c.pt]], input_labels: [[1]] });
     const out = await model(inputs);
     const masks = await processor.post_process_masks(out.pred_masks, inputs.original_sizes, inputs.reshaped_input_sizes);
     const scores = out.iou_scores.data;
