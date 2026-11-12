@@ -1,11 +1,12 @@
-# Montador de Looks — Especificação (V1)
+# LookLab — Especificação (V1)
 
 App para subir fotos de roupas que quero comprar (Shein e outras lojas), montar looks
 com elas e decidir o que vale a pena comprar.
 
 ## Plataforma
 - Web app para celular, instalável na tela inicial (PWA).
-- Uso individual, sem login. Dados salvos no próprio aparelho.
+- Sem login. Cada pessoa (eu + 2 ou 3 amigas) usa no próprio celular, com os dados salvos só no aparelho.
+- Publicado no GitHub Pages.
 - Lista típica: 30 a 100 peças, então precisa de busca e filtros.
 
 ## Entrada de peças
@@ -19,6 +20,8 @@ com elas e decidir o que vale a pena comprar.
 - Sem chave: preenchimento manual e combinação por regras (categoria + harmonia de cores + ocasião/estação).
 - Com chave da Anthropic (colada nas configurações, salva só no aparelho): a IA lê o print
   (tipo, cor, estilo, preço) e sugere looks com uma explicação curta.
+- As amigas podem usar o modo manual ou a minha chave, por um "link de convite" (`#chave=...`)
+  que ativa a IA no aparelho delas. O custo vai para a minha conta.
 - Custo estimado: ~R$ 0,01–0,06 por foto analisada.
 
 ## Looks
