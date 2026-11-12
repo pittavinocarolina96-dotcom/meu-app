@@ -14,3 +14,4 @@ jobs:
       - run: node tests/seg/run.mjs
       - run: DTYPE=fp32 node tests/seg/run.mjs
         continue-on-error: true
+      - run: node tests/seg/sam.mjs
