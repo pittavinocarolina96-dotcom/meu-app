@@ -1,0 +1,4 @@
+RESULT verde: pronto em 6282ms
+RESULT short: pronto em 343ms
+RESULT pico de memória do navegador (MB): 1142
+RESULT erros: []
