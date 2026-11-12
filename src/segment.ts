@@ -1,9 +1,11 @@
-// Recorte inteligente: o SAM ("Segment Anything") roda no próprio celular, de graça.
-// Você toca na roupa (ou o app toca no meio dela) e ele recorta exatamente aquela peça,
-// separando-a do fundo, da pele e das outras roupas. Baixa ~20 MB na primeira vez e
-// depois fica guardado no navegador.
+// Recorte inteligente: o EdgeTAM (versão do "Segment Anything" feita para rodar em celular)
+// roda no próprio aparelho, de graça. Você toca na roupa (ou o app toca no meio dela) e ele
+// recorta exatamente aquela peça, separando-a do fundo, da pele e das outras roupas.
+// Nos testes: ~0,7 GB de memória e <1 s por foto (o SlimSAM usava 3,8 GB e fechava a página no iPhone).
+import { clearStage, stage } from "./diag.ts";
 
-const MODEL = "Xenova/slimsam-77-uniform";
+// fp32: a versão quantizada (q8) deste modelo dá máscaras erradas
+const MODEL = "onnx-community/EdgeTAM-ONNX";
 
 export interface Point { x: number; y: number; on: boolean } // x,y em pixels do canvas; on=false = "tirar"
 
@@ -11,15 +13,21 @@ let loading: Promise<{ model: any; processor: any; RawImage: any }> | null = nul
 
 export function loadSam(onProgress?: (pct: number) => void) {
   loading ??= (async () => {
+    stage("carregar o recorte");
     const t = await import("@huggingface/transformers");
     t.env.allowLocalModels = false;
+    // modo leve: 1 thread, sem worker extra (menos memória no iPhone)
+    const wasm = (t.env.backends.onnx as any)?.wasm;
+    if (wasm) { wasm.numThreads = 1; wasm.proxy = false; }
+    stage("baixar a IA de recorte");
     const progress_callback = (p: any) => {
       if (p.status === "progress" && String(p.file).endsWith(".onnx")) onProgress?.(Math.round(p.progress));
     };
     const [model, processor] = await Promise.all([
-      t.SamModel.from_pretrained(MODEL, { dtype: "q8", progress_callback }),
+      t.EdgeTamModel.from_pretrained(MODEL, { dtype: "fp32", progress_callback }),
       t.AutoProcessor.from_pretrained(MODEL),
     ]);
+    clearStage();
     return { model, processor, RawImage: t.RawImage };
   })();
   loading.catch(() => { loading = null; });
@@ -30,33 +38,40 @@ export function loadSam(onProgress?: (pct: number) => void) {
 export class Cutter {
   private constructor(
     private sam: { model: any; processor: any },
-    private inputs: any,
+    private image: any,
     private emb: any,
     readonly src: HTMLCanvasElement
   ) {}
 
   static async create(src: HTMLCanvasElement, onProgress?: (pct: number) => void) {
     const sam = await loadSam(onProgress);
-    const inputs = await sam.processor(sam.RawImage.fromCanvas(src));
-    const emb = await sam.model.get_image_embeddings(inputs);
-    return new Cutter(sam, inputs, emb, src);
+    stage("analisar a foto");
+    const image = sam.RawImage.fromCanvas(src);
+    const emb = await sam.model.get_image_embeddings(await sam.processor(image));
+    clearStage();
+    return new Cutter(sam, image, emb, src);
   }
 
   /** Máscara (0/255 por pixel, tamanho do canvas) para os toques dados. */
   async mask(points: Point[]): Promise<Uint8ClampedArray> {
     const { model, processor } = this.sam;
-    const { original_sizes, reshaped_input_sizes } = this.inputs;
-    const input_points = processor.reshape_input_points([[points.map((p) => [p.x, p.y])]], original_sizes, reshaped_input_sizes);
-    const input_labels = processor.add_input_labels([[points.map((p) => (p.on ? 1 : 0))]], input_points);
+    // a análise pesada da foto (emb) já foi feita; aqui só entram os toques
+    const prompt = await processor(this.image, {
+      input_points: [[points.map((p) => [p.x, p.y])]],
+      input_labels: [[points.map((p) => (p.on ? 1 : 0))]],
+    });
+    const { original_sizes, reshaped_input_sizes, input_points, input_labels } = prompt;
+    stage("recortar");
     const out = await model({ ...this.emb, input_points, input_labels });
+    clearStage();
     const masks = await processor.post_process_masks(out.pred_masks, original_sizes, reshaped_input_sizes);
     const scores: Float32Array = out.iou_scores.data;
-    // O SAM devolve 3 opções: [pessoa/objeto inteiro, peça, pedaço]. Nos testes com prints da
+    // O modelo devolve 3 opções: [pessoa/objeto inteiro, peça, pedaço]. Nos testes com prints da
     // Shein, com 1 toque a do meio foi sempre a roupa. Com mais toques, vale a de maior confiança.
     let best = 1;
     if (points.length > 1) for (let i = 0; i < scores.length; i++) if (scores[i] > scores[best]) best = i;
     const m = masks[0];
-    const [, , H, W] = m.dims;
+    const H = m.dims.at(-2), W = m.dims.at(-1);
     const data: Uint8Array = m.data;
     const w = this.src.width, h = this.src.height;
     const a = new Uint8ClampedArray(w * h);
