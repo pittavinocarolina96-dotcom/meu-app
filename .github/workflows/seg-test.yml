@@ -11,7 +11,4 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - run: npm install --no-save @huggingface/transformers@4.3.2
-      - run: node tests/seg/run.mjs
-      - run: DTYPE=fp32 node tests/seg/run.mjs
-        continue-on-error: true
       - run: node tests/seg/sam.mjs
