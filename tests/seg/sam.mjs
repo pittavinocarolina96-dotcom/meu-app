@@ -5,7 +5,7 @@ mkdirSync("seg-out", { recursive: true });
 const id = "Xenova/slimsam-77-uniform";
 const model = await SamModel.from_pretrained(id, { dtype: "q8" });
 const processor = await AutoProcessor.from_pretrained(id);
-const cases = { "short.jpg": [115, 170], "top.jpg": [95, 110], "verde.jpg": [110, 100], "blusa.jpg": [110, 70] };
+const cases = { "short.jpg": [150, 170], "top.jpg": [150, 150], "verde.jpg": [150, 110], "blusa.jpg": [140, 110] };
 for (const [f, pt] of Object.entries(cases)) {
   const img = await RawImage.read(`tests/seg/${f}`);
   const inputs = await processor(img, { input_points: [[pt]], input_labels: [[1]] });
