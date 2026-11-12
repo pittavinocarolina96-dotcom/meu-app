@@ -1,6 +1,7 @@
 // Teste temporário: SlimSAM recortando a peça a partir de um toque. Imprime as imagens em base64.
 import { SamModel, AutoProcessor, RawImage } from "@huggingface/transformers";
-import { readFileSync, unlinkSync } from "node:fs";
+import { mkdirSync } from "node:fs";
+mkdirSync("seg-out", { recursive: true });
 const id = "Xenova/slimsam-77-uniform";
 const model = await SamModel.from_pretrained(id, { dtype: "q8" });
 const processor = await AutoProcessor.from_pretrained(id);
@@ -21,8 +22,6 @@ for (const [f, pt] of Object.entries(cases)) {
     }
   }
   const comp = new RawImage(buf, outW, H, 3);
-  await comp.save(`/tmp/${f}.png`);
-  const b64 = readFileSync(`/tmp/${f}.png`).toString("base64");
+  await comp.save(`seg-out/${f}.png`);
   console.log(`IMG ${f} scores=${Array.from(out.iou_scores.data).map((s) => s.toFixed(2)).join(",")}`);
-  for (let i = 0; i < b64.length; i += 4000) console.log(`B64 ${f} ${b64.slice(i, i + 4000)}`);
 }
